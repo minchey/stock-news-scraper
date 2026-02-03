@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import json
+from datetime import datetime
 
 # ======================
 # 1. 설정
@@ -37,25 +39,35 @@ def has_keyword(title: str) -> bool:
     return any(keyword in title for keyword in KEYWORDS)
 
 # ======================
-# 3. 기사 요약 추출
+# 3. 기사 상세 정보 추출
 # ======================
 
-def get_article_summary(article_url: str) -> str:
+def get_article_detail(article_url: str) -> dict:
     try:
         response = requests.get(article_url, headers=HEADERS, timeout=5)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # 네이버 뉴스 본문
+        # 본문
         content = soup.select_one("#dic_area")
         if not content:
-            return ""
+            return {}
 
-        # 첫 문단만 추출
         paragraphs = content.get_text("\n", strip=True).split("\n")
-        return paragraphs[0]
+        summary = paragraphs[0]
+
+        # 날짜/시간
+        date_tag = soup.select_one(
+            "span.media_end_head_info_datestamp_time"
+        )
+        published_at = date_tag.get_text(strip=True) if date_tag else ""
+
+        return {
+            "summary": summary,
+            "published_at": published_at
+        }
 
     except Exception:
-        return ""
+        return {}
 
 # ======================
 # 4. 뉴스 수집
@@ -83,24 +95,28 @@ for article in articles:
     if not (is_target_media(media) and has_keyword(title)):
         continue
 
-    summary = get_article_summary(link)
+    detail = get_article_detail(link)
+    if not detail:
+        continue
 
     scraped_news.append({
         "media": media,
         "title": title,
-        "summary": summary
+        "summary": detail["summary"],
+        "published_at": detail["published_at"],
+        "collected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
 
-    time.sleep(0.3)  # 서버 배려
+    time.sleep(0.3)
 
 # ======================
-# 5. 결과 출력
+# 5. JSON 파일 저장
 # ======================
 
-print(f"최종 분석 대상 뉴스 수: {len(scraped_news)}")
-print("-" * 60)
+filename = f"news_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-for news in scraped_news:
-    print(f"[{news['media']}] {news['title']}")
-    print(f"요약: {news['summary']}")
-    print("-" * 60)
+with open(filename, "w", encoding="utf-8") as f:
+    json.dump(scraped_news, f, ensure_ascii=False, indent=2)
+
+print(f"저장 완료: {filename}")
+print(f"총 뉴스 수: {len(scraped_news)}")
