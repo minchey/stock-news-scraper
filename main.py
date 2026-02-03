@@ -1,8 +1,30 @@
 import requests
 from bs4 import BeautifulSoup
+
 import time
+
 import json
 from datetime import datetime
+
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+response = client.chat.completions.create(
+    model="gpt-4.1-mini",
+    messages=[
+        {"role": "user", "content": "한 문장으로 오늘 주식 시장을 표현해줘"}
+    ]
+)
+
+print("AI 응답:")
+print(response.choices[0].message.content)
+
+
 
 # ======================
 # 1. 설정
