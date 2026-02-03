@@ -1,11 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
+import time
 
 # ======================
 # 1. 설정
 # ======================
 
-URL = "https://news.naver.com/section/101"  # 네이버 경제 섹션
+LIST_URL = "https://news.naver.com/section/101"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
@@ -19,20 +20,10 @@ TARGET_MEDIA = [
 ]
 
 KEYWORDS = [
-    # 시장
-    "주식", "증시", "코스피", "코스닥", "시총",
-    "급등", "급락", "반등", "하락",
-
-    # 기업
+    "주식", "증시", "코스피", "코스닥",
     "삼성", "SK", "하이닉스", "엔비디아",
-    "현대차", "LG", "카카오", "네이버",
-
-    # 거시경제
-    "금리", "환율", "물가", "CPI", "인플레이션",
-    "연준", "FOMC",
-
-    # 기술
-    "AI", "반도체", "HBM", "데이터센터"
+    "금리", "환율", "물가", "CPI",
+    "AI", "반도체", "HBM"
 ]
 
 # ======================
@@ -45,22 +36,36 @@ def is_target_media(media: str) -> bool:
 def has_keyword(title: str) -> bool:
     return any(keyword in title for keyword in KEYWORDS)
 
-def is_useful_news(news: dict) -> bool:
-    return (
-        is_target_media(news["media"])
-        and has_keyword(news["title"])
-    )
-
 # ======================
-# 3. 뉴스 수집
+# 3. 기사 요약 추출
 # ======================
 
-response = requests.get(URL, headers=HEADERS)
+def get_article_summary(article_url: str) -> str:
+    try:
+        response = requests.get(article_url, headers=HEADERS, timeout=5)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # 네이버 뉴스 본문
+        content = soup.select_one("#dic_area")
+        if not content:
+            return ""
+
+        # 첫 문단만 추출
+        paragraphs = content.get_text("\n", strip=True).split("\n")
+        return paragraphs[0]
+
+    except Exception:
+        return ""
+
+# ======================
+# 4. 뉴스 수집
+# ======================
+
+response = requests.get(LIST_URL, headers=HEADERS)
 soup = BeautifulSoup(response.text, "html.parser")
 
 scraped_news = []
 
-# 기사 카드 단위
 articles = soup.select("div.sa_text")
 
 for article in articles:
@@ -72,29 +77,30 @@ for article in articles:
 
     title = title_tag.get_text(strip=True)
     media = media_tag.get_text(strip=True)
+    link = title_tag["href"]
+
+    # 1차 필터
+    if not (is_target_media(media) and has_keyword(title)):
+        continue
+
+    summary = get_article_summary(link)
 
     scraped_news.append({
+        "media": media,
         "title": title,
-        "media": media
+        "summary": summary
     })
 
-# ======================
-# 4. 필터 적용
-# ======================
-
-filtered_news = []
-
-for news in scraped_news:
-    if is_useful_news(news):
-        filtered_news.append(news)
+    time.sleep(0.3)  # 서버 배려
 
 # ======================
 # 5. 결과 출력
 # ======================
 
-print(f"전체 수집 뉴스 수: {len(scraped_news)}")
-print(f"필터 통과 뉴스 수: {len(filtered_news)}")
-print("-" * 50)
+print(f"최종 분석 대상 뉴스 수: {len(scraped_news)}")
+print("-" * 60)
 
-for news in filtered_news:
+for news in scraped_news:
     print(f"[{news['media']}] {news['title']}")
+    print(f"요약: {news['summary']}")
+    print("-" * 60)
